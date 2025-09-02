@@ -102,6 +102,7 @@
         } catch (e) {
           statusEl.textContent = 'Failed to fetch. Retrying…';
           console.error(e);
+          window.setTimeout(() => {getWallpaper()}, 2000)
         }
       }
 
