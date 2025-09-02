@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Wallpaper Crossfade</title>
+    <style>
+      :root {
+        --current: url('defaultWallpaper.png');
+        --next: none;
+        --fade-time: 300ms;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        :root { --fade-time: 0ms; }
+      }
+
+      html, body {
+        height: 100%;
+        margin: 0;
+      }
+
+      .wallpaper {
+        position: fixed;
+        inset: 0;
+        background-image: var(--current);
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: cover;
+      }
+
+      .wallpaper::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background-image: var(--next);
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-size: cover;
+        opacity: 0;
+        transition: opacity var(--fade-time) ease-in-out;
+        pointer-events: none;
+      }
+
+      .wallpaper.fade-in::after {
+        opacity: 1;
+      }
+
+      .ui {
+        position: fixed;
+        top: 16px; left: 16px;
+        display: flex; gap: 8px;
+      }
+      button {
+        background: black; color: white; border: 0;
+        padding: 8px 12px; border-radius: 6px; cursor: pointer;
+      }
+      .status {
+        color: white; background: black; padding: 6px 10px; border-radius: 6px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="wallpaper" class="wallpaper"></div>
+
+    <div class="ui">
+      <button id="refreshBtn">Refresh</button>
+      <div id="status" class="status">Idle</div>
+    </div>
+
+    <script>
+      const wallpaperEl = document.getElementById('wallpaper');
+      const statusEl = document.getElementById('status');
+      const refreshBtn = document.getElementById('refreshBtn');
+
+      function getNextUrl() {
+        // return `https://minimalistic-wallpaper.demolab.com/?random`;
+      }
+
+      async function getWallpaper() {
+        try {
+          statusEl.textContent = 'Fetching...';
+
+          await fetch("https://jsonplaceholder.typicode.com/todos/1", { cache: "no-store" });
+
+          const nextUrl = getNextUrl();
+
+          await preload(nextUrl);
+
+          document.documentElement.style.setProperty('--next', `url("${nextUrl}")`);
+          wallpaperEl.classList.add('fade-in');
+
+          const fadeTime = getComputedStyle(document.documentElement).getPropertyValue('--fade-time').trim();
+          const ms = parseTimeToMs(fadeTime) || 300;
+
+          window.setTimeout(() => {
+            document.documentElement.style.setProperty('--current', `url("${nextUrl}")`);
+            document.documentElement.style.setProperty('--next', 'none');
+            wallpaperEl.classList.remove('fade-in');
+            statusEl.textContent = 'Updated';
+          }, ms);
+        } catch (e) {
+          statusEl.textContent = 'Failed to fetch. Retrying…';
+          console.error(e);
+        }
+      }
+
+      function preload(src) {
+        return new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve();
+          img.onerror = reject;
+          img.src = src;
+        });
+      }
+
+      function parseTimeToMs(str) {
+        if (!str) return 0;
+        str = str.trim();
+        if (str.endsWith('ms')) return parseFloat(str);
+        if (str.endsWith('s')) return parseFloat(str) * 1000;
+        return parseFloat(str);
+      }
+
+      refreshBtn.addEventListener('click', getWallpaper);
+      window.addEventListener('load', getWallpaper);
+    </script>
+  </body>
+</html>
