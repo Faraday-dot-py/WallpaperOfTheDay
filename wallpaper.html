@@ -47,16 +47,74 @@
 
       .ui {
         position: fixed;
-        top: 16px; left: 16px;
-        display: flex; gap: 8px;
+        top: 16px; 
+        left: 16px;
+        display: flex; 
+        gap: 8px;
       }
       button {
-        background: black; color: white; border: 0;
-        padding: 8px 12px; border-radius: 6px; cursor: pointer;
+        background-color: rgba(80, 80, 80, 0.5);
+        padding: 8px 12px; 
+        border-radius: 6px; 
+        cursor: pointer;
       }
       .status {
-        color: white; background: black; padding: 6px 10px; border-radius: 6px;
+        color: white; 
+        background-color: rgba(80, 80, 80, 0.5);
+        padding: 6px 10px; 
+        border-radius: 6px;
+
       }
+
+      /* From Uiverse.io by Shoh2008 */ 
+      .loader {
+        width: 45px;
+        height: 20px;
+        background: linear-gradient(#0000 calc(1*100%/6),#fff 0 calc(3*100%/6),#0000 0),
+                  linear-gradient(#0000 calc(2*100%/6),#fff 0 calc(4*100%/6),#0000 0),
+                  linear-gradient(#0000 calc(3*100%/6),#fff 0 calc(5*100%/6),#0000 0);
+        background-size: 10px 400%;
+        background-repeat: no-repeat;
+        animation: matrix 1s infinite linear;
+      }
+
+      @keyframes matrix {
+        0% {
+          background-position: 0% 100%, 50% 100%, 100% 100%
+        }
+
+        100% {
+          background-position: 0% 0%, 50% 0%, 100% 0%
+        }
+      }
+
+      /* From Uiverse.io by adamgiebl */ 
+      button {
+        display: inline-block;
+        outline: 0;
+        border: 0;
+        cursor: pointer;
+        will-change: box-shadow,transform;
+        box-shadow: 0px 0.01em 0.01em rgb(45 35 66 / 40%), 0px 0.3em 0.7em -0.01em rgb(45 35 66 / 30%), inset 0px -0.01em 0px rgb(58 65 111 / 50%);
+        border-radius: 0.3em;
+        color: #fff;
+        text-shadow: 0 1px 0 rgb(0 0 0 / 40%);
+        transition: box-shadow 0.15s ease, transform 0.15s ease;
+        background-color: rgba(80, 80, 80, 0.5);
+        
+      }
+
+      button:hover {
+        box-shadow: 0px 0.1em 0.2em rgb(45 35 66 / 40%), 0px 0.4em 0.7em -0.1em rgb(45 35 66 / 30%), inset 0px -0.1em 0px #3c4fe0;
+        transform: translateY(-0.1em);
+      }
+
+      button:active {
+        box-shadow: inset 0px 0.1em 0.6em #3c4fe0;
+        transform: translateY(0em);
+      }
+          
+
     </style>
   </head>
 
@@ -73,38 +131,80 @@
       const statusEl = document.getElementById('status');
       const refreshBtn = document.getElementById('refreshBtn');
 
+      const loading = `<div class="loader"></div>`
+
       function getNextUrl() {
         return `https://minimalistic-wallpaper.demolab.com/?random`;
       }
 
       async function getWallpaper() {
         try {
-          statusEl.textContent = 'Fetching...';
+          //statusEl.textContent = 'Loading…';
+          statusEl.innerHTML = loading;
 
+          // Optional: simulate network work you had before
           await fetch("https://jsonplaceholder.typicode.com/todos/1", { cache: "no-store" });
 
-          const nextUrl = getNextUrl();
+          // 1) Get next URL and cache-bust so the browser doesn't reuse pixels
+          const rawUrl = getNextUrl();
+          const nextUrl = rawUrl + (rawUrl.includes('?') ? '&' : '?') + 'v=' + Date.now();
 
-          await preload(nextUrl);
+          // 2) Preload *and decode* so we don't flash while swapping
+          await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+              // Ensure it’s decoded before swap (prevents flicker on some browsers)
+              if (img.decode) {
+                img.decode().then(resolve).catch(resolve); // ignore decode errors and continue
+              } else {
+                resolve();
+              }
+            };
+            img.onerror = reject;
+            img.src = nextUrl;
+          });
 
+          // 3) Set --next so CSS can show it above --current during the fade
           document.documentElement.style.setProperty('--next', `url("${nextUrl}")`);
+
+          // Force reflow so the upcoming class change triggers a transition
+          // (reading a layout property is enough to flush)
+          void wallpaperEl.offsetWidth;
+
+          // 4) Start fade
           wallpaperEl.classList.add('fade-in');
 
-          const fadeTime = getComputedStyle(document.documentElement).getPropertyValue('--fade-time').trim();
-          const ms = parseTimeToMs(fadeTime) || 300;
-
-          window.setTimeout(() => {
+          // Prefer swapping on 'transitionend' so CSS timing is the source of truth
+          const swap = () => {
             document.documentElement.style.setProperty('--current', `url("${nextUrl}")`);
             document.documentElement.style.setProperty('--next', 'none');
             wallpaperEl.classList.remove('fade-in');
             statusEl.textContent = 'Updated';
-          }, ms);
+            wallpaperEl.removeEventListener('transitionend', onEnd);
+            clearTimeout(fallbackTimer);
+          };
+
+          const onEnd = (e) => {
+            // If your CSS transitions only opacity on the fading layer, you can check e.propertyName === 'opacity'
+            swap();
+          };
+          wallpaperEl.addEventListener('transitionend', onEnd, { once: true });
+
+          // Fallback in case 'transitionend' never fires (e.g., user has reduced motion)
+          const fadeTime = getComputedStyle(document.documentElement)
+            .getPropertyValue('--fade-time').trim(); // e.g., "300ms" or "0.3s"
+          const ms = parseTimeToMs(fadeTime) || 300;
+          const fallbackTimer = setTimeout(swap, ms + 50);
+
+          // Debug: see what we actually set
+          console.log('next:', document.documentElement.style.getPropertyValue('--next'));
         } catch (e) {
           statusEl.textContent = 'Failed to fetch. Retrying…';
           console.error(e);
-          window.setTimeout(() => {getWallpaper()}, 2000)
+          window.setTimeout(getWallpaper, 2000);
         }
       }
+
 
       function preload(src) {
         return new Promise((resolve, reject) => {
